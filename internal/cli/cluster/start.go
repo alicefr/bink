@@ -1,0 +1,93 @@
+package cluster
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/bootc-dev/bink/internal/cluster"
+	"github.com/bootc-dev/bink/internal/network"
+	"github.com/bootc-dev/bink/internal/node"
+	"github.com/sirupsen/logrus"
+	"github.com/spf13/cobra"
+)
+
+func newStartCmd() *cobra.Command {
+	var imagesImage string
+
+	cmd := &cobra.Command{
+		Use:   "start",
+		Short: "Start a new Kubernetes cluster",
+		Long:  "Create network, control plane node, and initialize Kubernetes cluster with kubeadm",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			logger := logrus.New()
+			return runStart(cmd.Context(), logger, imagesImage)
+		},
+	}
+
+	cmd.Flags().StringVar(&imagesImage, "images-image", "localhost/fedora-bootc-k8s-image:latest", "Container image containing base VM images")
+
+	return cmd
+}
+
+func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string) error {
+	logger.Info("=== Creating Kubernetes cluster ===")
+	logger.Info("")
+
+	logger.Info("Step 1: Creating cluster network...")
+	netMgr := network.NewManager()
+	if err := netMgr.EnsureClusterNetwork(ctx); err != nil {
+		return fmt.Errorf("ensuring cluster network: %w", err)
+	}
+	logger.Info("")
+
+	logger.Info("Step 2: Creating control plane node (node1)...")
+	logger.Infof("VM images container: %s", imagesImage)
+
+	controlPlane := node.NewWithConfig("node1", true, node.Config{
+		ImagesImage: imagesImage,
+	})
+
+	exists, err := controlPlane.Exists(ctx)
+	if err != nil {
+		return fmt.Errorf("checking if node exists: %w", err)
+	}
+
+	if exists {
+		return fmt.Errorf("node1 already exists. Run 'bink cluster stop' first")
+	}
+
+	if err := controlPlane.Create(ctx); err != nil {
+		return fmt.Errorf("creating control plane node: %w", err)
+	}
+	logger.Info("")
+
+	logger.Info("Step 3: Initializing Kubernetes cluster...")
+	clusterMgr := cluster.New(cluster.Config{
+		Name:         "bink",
+		ControlPlane: "node1",
+		Logger:       logger,
+	})
+
+	if err := clusterMgr.Init(ctx, cluster.InitOptions{
+		NodeName: "node1",
+	}); err != nil {
+		return fmt.Errorf("initializing cluster: %w", err)
+	}
+
+	logger.Info("")
+	logger.Info("=== Exposing API server to localhost:6443 ===")
+	logger.Warn("API server exposure not yet implemented")
+	logger.Warn("Use: ./vm/expose-api.sh node1")
+
+	logger.Info("")
+	logger.Info("✅ Cluster created successfully!")
+	logger.Info("")
+	logger.Info("Usage:")
+	logger.Info("  export KUBECONFIG=./vm/kubeconfig")
+	logger.Info("  kubectl get nodes")
+	logger.Info("")
+	logger.Info("To add worker nodes:")
+	logger.Info("  bink node add node2")
+
+	return nil
+}
