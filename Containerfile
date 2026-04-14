@@ -1,0 +1,25 @@
+# Build environment for bink CLI with all C dependencies
+FROM registry.fedoraproject.org/fedora:43
+
+# Install Go and required C libraries for Podman bindings
+RUN dnf install -y \
+    golang \
+    git \
+    gpgme-devel \
+    btrfs-progs-devel \
+    device-mapper-devel \
+    && dnf clean all
+
+WORKDIR /build
+
+# Copy go.mod and go.sum first to cache dependencies separately
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# Build using bind mount - source is mounted read-only, binary written to /output
+WORKDIR /output
+RUN --mount=type=bind,source=.,target=/src,rw \
+    --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg/mod \
+    cd /src && CGO_ENABLED=1 go build -o /output/bink ./cmd/bink
