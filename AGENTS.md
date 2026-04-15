@@ -2,6 +2,28 @@
 
 **Task:** Perform an idempotent startup of the cluster and verify the node status.
 
+---
+
+## 📚 About bootc
+
+This project uses **bootc** for creating bootable container images. For complete documentation, see: https://bootc.dev/bootc/intro.html
+
+### What is bootc?
+
+**bootc** is a tool for performing "Transactional, in-place operating system updates using OCI/Docker container images." It applies Docker's successful layering model to bootable operating systems.
+
+**Key Concepts:**
+- Uses standard OCI/Docker containers as a transport and delivery format for base operating system updates
+- Container images include a Linux kernel (typically in `/usr/lib/modules`) for booting
+- The base userspace doesn't run containerized by default at runtime
+- Standard init systems like systemd operate normally as pid1 without an outer wrapper process
+- Provides seamless in-place upgrades across system changes
+- Builds on the ostree project's proven operating system update infrastructure
+- CLI and API are considered stable
+
+**Why bootc for this project:**
+This allows us to package and distribute the entire Kubernetes node OS as a container image (`localhost/fedora-bootc-k8s-image:latest`), providing reproducible and transactional cluster deployments.
+
 ## Automated Test Script
 
 For automated testing, use the provided test script:
