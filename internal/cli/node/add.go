@@ -93,8 +93,9 @@ func runAdd(ctx context.Context, nodeName, controlPlane, imagesImage, role strin
 	})
 
 	if err := clusterMgr.Join(ctx, cluster.JoinOptions{
-		NodeName:     nodeName,
-		ControlPlane: controlPlane,
+		NodeName:       nodeName,
+		ControlPlane:   controlPlane,
+		IsControlPlane: isControlPlane,
 	}); err != nil {
 		return fmt.Errorf("joining node to cluster: %w", err)
 	}

@@ -11,12 +11,13 @@ import (
 
 // JoinOptions holds options for joining a node to the cluster
 type JoinOptions struct {
-	NodeName     string
-	ControlPlane string
-	Timeout      time.Duration
+	NodeName       string
+	ControlPlane   string
+	IsControlPlane bool
+	Timeout        time.Duration
 }
 
-// Join joins a worker node to the cluster
+// Join joins a node to the cluster
 func (c *Cluster) Join(ctx context.Context, opts JoinOptions) error {
 	if opts.Timeout == 0 {
 		opts.Timeout = 10 * time.Minute
@@ -29,14 +30,19 @@ func (c *Cluster) Join(ctx context.Context, opts JoinOptions) error {
 	nodeName := opts.NodeName
 	controlPlane := opts.ControlPlane
 
+	nodeType := "worker"
+	if opts.IsControlPlane {
+		nodeType = "control-plane"
+	}
+
 	c.logger.Info("")
-	c.logger.Infof("=== Generating join command from %s ===", controlPlane)
+	c.logger.Infof("=== Generating %s join command from %s ===", nodeType, controlPlane)
 
 	// Create SSH client for control plane
 	cpSSHClient := ssh.NewClientForNode(controlPlane, c.logger)
 
 	// Generate join command
-	joinCommand, err := c.generateJoinCommand(ctx, cpSSHClient)
+	joinCommand, err := c.generateJoinCommand(ctx, cpSSHClient, opts.IsControlPlane)
 	if err != nil {
 		return fmt.Errorf("failed to generate join command: %w", err)
 	}
@@ -73,7 +79,39 @@ func (c *Cluster) Join(ctx context.Context, opts JoinOptions) error {
 }
 
 // generateJoinCommand generates a fresh join command from the control plane
-func (c *Cluster) generateJoinCommand(ctx context.Context, cpSSHClient *ssh.Client) (string, error) {
+func (c *Cluster) generateJoinCommand(ctx context.Context, cpSSHClient *ssh.Client, isControlPlane bool) (string, error) {
+	if isControlPlane {
+		// For control-plane nodes, we need to upload certificates and get the certificate key
+		c.logger.Info("Uploading certificates for control-plane join...")
+		certKeyOutput, err := cpSSHClient.Exec(ctx, "sudo kubeadm init phase upload-certs --upload-certs 2>/dev/null | tail -1")
+		if err != nil {
+			return "", fmt.Errorf("failed to upload certificates: %w", err)
+		}
+
+		certificateKey := strings.TrimSpace(certKeyOutput)
+		if certificateKey == "" {
+			return "", fmt.Errorf("certificate key is empty")
+		}
+
+		c.logger.Infof("Certificate key: %s", certificateKey)
+
+		// Generate join command with control-plane flag
+		output, err := cpSSHClient.Exec(ctx, "sudo kubeadm token create --print-join-command")
+		if err != nil {
+			return "", fmt.Errorf("failed to generate join command: %w", err)
+		}
+
+		baseCommand := strings.TrimSpace(output)
+		if baseCommand == "" {
+			return "", fmt.Errorf("join command is empty")
+		}
+
+		// Add control-plane flag and certificate key
+		joinCommand := fmt.Sprintf("%s --control-plane --certificate-key %s", baseCommand, certificateKey)
+		return joinCommand, nil
+	}
+
+	// For worker nodes, just generate a standard join command
 	output, err := cpSSHClient.Exec(ctx, "sudo kubeadm token create --print-join-command")
 	if err != nil {
 		return "", fmt.Errorf("failed to generate join command: %w", err)
