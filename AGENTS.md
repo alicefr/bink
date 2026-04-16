@@ -24,16 +24,53 @@ This project uses **bootc** for creating bootable container images. For complete
 **Why bootc for this project:**
 This allows us to package and distribute the entire Kubernetes node OS as a container image (`localhost/fedora-bootc-k8s-image:latest`), providing reproducible and transactional cluster deployments.
 
-## Automated Test Script
+## Automated Testing
 
-For automated testing, use the provided test script:
+**Integration tests** are now the recommended way to test cluster functionality. Tests use the Ginkgo framework and provide comprehensive validation.
+
+### Quick Start: Run All Tests
 
 ```bash
-cd bink
-./test-cluster.sh
+# Run all integration tests (parallel execution with auto-assigned ports)
+go test -v ./test/integration/...
+
+# Run tests serially (if needed for debugging)
+go test -v -p 1 ./test/integration/...
+
+# Run specific test
+go test -v --ginkgo.focus="complete Kubernetes cluster"
+
+# Run with verbose output
+go test -v ./test/integration/... -ginkgo.v
 ```
 
-The script follows all steps below and provides colored output for easy verification.
+**Note:** Tests use `--api-port 0` for automatic port assignment, allowing parallel execution without port conflicts.
+
+### Available Test Suites
+
+**1. Complete Cluster Creation Test** (merged test - ~2-3 min)
+```bash
+go test -v --ginkgo.focus="should create and initialize a complete Kubernetes cluster"
+```
+Validates: Container creation, Kubernetes initialization, Calico CNI, DNS configuration
+
+**2. Cluster Stop Isolation Test** (~2-3 min)
+```bash
+go test -v --ginkgo.focus="should isolate cluster stop operations"
+```
+Validates: Cluster name-based isolation, default vs named cluster separation
+
+**3. Cluster Already Exists Error** (~2 min)
+```bash
+go test -v --ginkgo.focus="should handle cluster already exists"
+```
+Validates: Error handling when creating duplicate clusters
+
+### Test Benefits
+- ✅ **Comprehensive:** Tests all aspects of cluster creation in one flow
+- ✅ **Fast:** Merged tests save ~6-8 minutes vs separate tests
+- ✅ **Reliable:** Unique cluster names prevent conflicts
+- ✅ **Automated:** Can be run in CI/CD pipelines
 
 ---
 
@@ -167,25 +204,51 @@ exit
 
 ---
 
-## Test Script Details
+## Integration Test Details
 
-The automated test script (`test-cluster.sh`) includes:
-- **Color-coded output**: Green for success, yellow for warnings, red for failures
-- **Automatic cleanup**: Detects and stops existing containers before starting
-- **Error handling**: Provides detailed logs if tests fail
-- **Verification**: Checks container existence and running status
-- **Summary**: Shows cluster details and next steps
+The integration tests (`test/integration/cluster_test.go`) provide comprehensive validation:
+- **Isolated execution**: Each test uses unique cluster names to prevent conflicts
+- **Automatic cleanup**: Resources cleaned up in `AfterEach` hooks
+- **Merged tests**: Related validations combined to save time and resources
+- **Comprehensive checks**: Validates containers, Kubernetes, CNI, DNS in one flow
+- **Error verification**: Tests both success and failure scenarios
 
-### Pro-Tip for the Agent:
-If you are using a more advanced AI agent (like one with a bash tool), you can instruct it to use this logic: `if podman ps -a | grep -q k8s-node1; then ./bink cluster stop; fi`. This makes the "Cleanup" step fully autonomous!
+### Test Design Philosophy
+
+**Test Merging for Efficiency:**
+- Tests validating different aspects of the same command are merged
+- Example: Container creation, K8s init, CNI, and DNS are all validated in one test
+- **Benefit:** Saves ~6-8 minutes per test suite run (1 cluster creation vs 4)
+
+**When to Use Manual Testing:**
+For quick verification during development, you can still manually test:
+```bash
+./bink cluster start --cluster-name dev-test
+podman ps  # Verify container exists
+./bink node ssh node1  # SSH into node
+kubectl get nodes  # Inside VM
+./bink cluster stop --cluster-name dev-test
+```
+
+### CI/CD Integration
+Integration tests are designed to run in CI pipelines:
+- Parallel execution safe (unique cluster names)
+- Clean teardown on pass or fail
+- ~8-12 minutes for full suite (with merged tests)
+- Exit codes indicate success/failure
 
 ---
 
 ## Changelog
 
+- **2026-04-17**: Implemented API port randomization (`--api-port 0` for auto-assignment)
+- **2026-04-17**: Enabled parallel test execution (tests now run in parallel by default)
+- **2026-04-17**: Migrated to Ginkgo integration tests (replaced bash test scripts)
+- **2026-04-17**: Implemented test merging strategy (saves ~6-8 min per suite run)
+- **2026-04-17**: Added cluster stop isolation test (validates cluster name-based separation)
+- **2026-04-17**: Updated testing documentation to focus on `go test` workflow
 - **2026-04-14**: Fixed Calico CNI installation using `ostree-state-overlay@opt.service` for writable /opt (bootc best practice)
 - **2026-04-14**: Migrated to container image for base VM images (removed `--images-dir` flag)
 - **2026-04-14**: Added ephemeral storage verification steps (image volume, cluster-keys, workspace)
 - **2026-04-14**: Added alternative kubectl verification commands from host
 - **2026-04-14**: Fixed container name from `k8s-node` to `k8s-node1` (matches actual implementation)
-- **2026-04-14**: Added automated test script (`test-cluster.sh`) for easier testing

@@ -9,10 +9,12 @@ import (
 	"github.com/bootc-dev/bink/internal/node"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func newStartCmd() *cobra.Command {
 	var imagesImage string
+	var apiPort int
 
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -20,16 +22,17 @@ func newStartCmd() *cobra.Command {
 		Long:  "Create network, control plane node, and initialize Kubernetes cluster with kubeadm",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger := logrus.New()
-			return runStart(cmd.Context(), logger, imagesImage)
+			return runStart(cmd.Context(), logger, imagesImage, apiPort)
 		},
 	}
 
 	cmd.Flags().StringVar(&imagesImage, "images-image", "localhost/fedora-bootc-k8s-image:latest", "Container image containing base VM images")
+	cmd.Flags().IntVar(&apiPort, "api-port", 6443, "API server port to expose (0 = auto-assign random port)")
 
 	return cmd
 }
 
-func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string) error {
+func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string, apiPort int) error {
 	logger.Info("=== Creating Kubernetes cluster ===")
 	logger.Info("")
 
@@ -43,8 +46,17 @@ func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string) er
 	logger.Info("Step 2: Creating control plane node (node1)...")
 	logger.Infof("VM images container: %s", imagesImage)
 
+	clusterName := viper.GetString("cluster.name")
+
+	// Convert 0 to -1 for auto-assign (to distinguish from unset)
+	if apiPort == 0 {
+		apiPort = -1
+	}
+
 	controlPlane := node.NewWithConfig("node1", true, node.Config{
 		ImagesImage: imagesImage,
+		ClusterName: clusterName,
+		APIPort:     apiPort,
 	})
 
 	exists, err := controlPlane.Exists(ctx)
@@ -63,7 +75,7 @@ func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string) er
 
 	logger.Info("Step 3: Initializing Kubernetes cluster...")
 	clusterMgr := cluster.New(cluster.Config{
-		Name:         "bink",
+		Name:         clusterName,
 		ControlPlane: "node1",
 		Logger:       logger,
 	})

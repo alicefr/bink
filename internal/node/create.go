@@ -37,7 +37,15 @@ func (n *Node) createContainer(ctx context.Context) error {
 	}
 
 	if n.IsControlPlane {
-		opts.Ports = []string{"6443:6443"}
+		// Use configured API port (0 = auto-assign random port)
+		var portMapping string
+		if n.APIPort == 0 {
+			// Empty host port means auto-assign
+			portMapping = ":6443"
+		} else {
+			portMapping = fmt.Sprintf("%d:6443", n.APIPort)
+		}
+		opts.Ports = []string{portMapping}
 	}
 
 	containerID, err := n.podman.ContainerCreate(ctx, opts)
@@ -46,6 +54,19 @@ func (n *Node) createContainer(ctx context.Context) error {
 	}
 
 	logrus.Infof("Container %s created: %s", n.ContainerName, containerID)
+
+	// If using auto-assigned port (APIPort=0), get the actual assigned port
+	if n.IsControlPlane && n.APIPort == 0 {
+		assignedPort, err := n.podman.GetPublishedPort(ctx, n.ContainerName, "6443/tcp")
+		if err != nil {
+			return fmt.Errorf("getting assigned API port: %w", err)
+		}
+		n.AssignedAPIPort = assignedPort
+		logrus.Infof("API server port auto-assigned: %d", assignedPort)
+	} else if n.IsControlPlane {
+		n.AssignedAPIPort = n.APIPort
+		logrus.Infof("API server port: %d", n.AssignedAPIPort)
+	}
 
 	containerIP, err := n.podman.ContainerInspect(ctx, n.ContainerName, "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}")
 	if err != nil {

@@ -12,6 +12,8 @@ import (
 // Config holds node configuration options
 type Config struct {
 	ImagesImage string
+	ClusterName string
+	APIPort     int // API server port to expose (0 = auto-assign random port)
 }
 
 type Node struct {
@@ -24,6 +26,8 @@ type Node struct {
 	VCPUs          int
 	BaseDisk       string
 	ImagesImage    string
+	APIPort        int // Configured API port (0 = auto-assign)
+	AssignedAPIPort int // Actual assigned port after container creation
 
 	podman *podman.Client
 	virsh  *virsh.Client
@@ -34,24 +38,48 @@ func New(name string, isControlPlane bool) *Node {
 }
 
 func NewWithConfig(name string, isControlPlane bool, cfg Config) *Node {
-	containerName := config.ContainerNamePrefix + name
+	// Build container name with cluster name for uniqueness
+	var containerName string
+	if cfg.ClusterName != "" && cfg.ClusterName != config.DefaultNetworkName {
+		// Use cluster-specific name: k8s-{cluster}-{node}
+		containerName = config.ContainerNamePrefix + cfg.ClusterName + "-" + name
+	} else {
+		// Default: k8s-{node}
+		containerName = config.ContainerNamePrefix + name
+	}
 
 	if cfg.ImagesImage == "" {
 		cfg.ImagesImage = config.DefaultBootcImagesImage
 	}
 
+	// Default API port to 6443 if not specified, unless explicitly set to 0 for auto-assign
+	apiPort := cfg.APIPort
+	if apiPort == 0 && !isControlPlane {
+		// Non-control-plane nodes don't need API port
+		apiPort = 0
+	} else if apiPort == 0 && isControlPlane {
+		// Control plane nodes default to 6443 unless explicitly set to auto-assign
+		// To auto-assign, caller must set APIPort to -1
+		apiPort = config.DefaultAPIServerPort
+	} else if apiPort == -1 {
+		// -1 means auto-assign
+		apiPort = 0
+	}
+
 	return &Node{
-		Name:           name,
-		ContainerName:  containerName,
-		ClusterIP:      CalculateClusterIP(name),
-		ClusterMAC:     CalculateClusterMAC(name),
-		IsControlPlane: isControlPlane,
-		Memory:         config.DefaultMemory,
-		VCPUs:          config.DefaultVCPUs,
-		BaseDisk:       config.DefaultBaseDisk,
-		ImagesImage:    cfg.ImagesImage,
-		podman:         podman.NewClient(),
-		virsh:          virsh.NewClient(containerName),
+		Name:            name,
+		ContainerName:   containerName,
+		ClusterIP:       CalculateClusterIP(name),
+		ClusterMAC:      CalculateClusterMAC(name),
+		IsControlPlane:  isControlPlane,
+		Memory:          config.DefaultMemory,
+		VCPUs:           config.DefaultVCPUs,
+		BaseDisk:        config.DefaultBaseDisk,
+		ImagesImage:     cfg.ImagesImage,
+		APIPort:         apiPort,
+		AssignedAPIPort: 0, // Will be set after container creation
+		podman:          podman.NewClient(),
+		virsh:           virsh.NewClient(containerName),
 	}
 }
 
