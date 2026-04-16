@@ -31,7 +31,7 @@ const (
 
 	DefaultAPIServerPort = 6443
 	DefaultCNIManifest   = "https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/calico.yaml"
-	DefaultKubeconfigDir = "../vm"
+	DefaultKubeconfigDir = "."
 
 	ContainerNamePrefix = "k8s-"
 

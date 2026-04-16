@@ -75,15 +75,13 @@ func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string) er
 	}
 
 	logger.Info("")
-	logger.Info("=== Exposing API server to localhost:6443 ===")
-	logger.Warn("API server exposure not yet implemented")
-	logger.Warn("Use: ./vm/expose-api.sh node1")
-
-	logger.Info("")
 	logger.Info("✅ Cluster created successfully!")
 	logger.Info("")
-	logger.Info("Usage:")
-	logger.Info("  export KUBECONFIG=./vm/kubeconfig")
+	logger.Info("Next steps:")
+	logger.Info("  ./bink api expose")
+	logger.Info("")
+	logger.Info("Then use:")
+	logger.Info("  export KUBECONFIG=./kubeconfig")
 	logger.Info("  kubectl get nodes")
 	logger.Info("")
 	logger.Info("To add worker nodes:")
