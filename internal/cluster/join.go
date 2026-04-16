@@ -68,6 +68,19 @@ func (c *Cluster) Join(ctx context.Context, opts JoinOptions) error {
 		return fmt.Errorf("failed to join node: %w", err)
 	}
 
+	// Label worker nodes with the worker role
+	if !opts.IsControlPlane {
+		c.logger.Info("")
+		c.logger.Infof("=== Labeling %s as worker ===", nodeName)
+
+		labelCmd := fmt.Sprintf("sudo kubectl label node %s node-role.kubernetes.io/worker=worker --overwrite --kubeconfig=/etc/kubernetes/admin.conf", nodeName)
+		if err := cpSSHClient.ExecWithOutput(ctx, labelCmd); err != nil {
+			c.logger.Warnf("Failed to label node as worker (non-fatal): %v", err)
+		} else {
+			c.logger.Infof("✅ Node %s labeled as worker", nodeName)
+		}
+	}
+
 	c.logger.Info("")
 	c.logger.Infof("✅ Node %s successfully joined the cluster!", nodeName)
 	c.logger.Info("")
