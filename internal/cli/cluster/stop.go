@@ -8,6 +8,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/bootc-dev/bink/internal/config"
 	"github.com/bootc-dev/bink/internal/podman"
@@ -40,10 +41,35 @@ func runStop(ctx context.Context, logger *logrus.Logger, force, removeData bool)
 	podmanClient := podman.NewClient()
 
 	// Find all cluster containers
+	clusterName := viper.GetString("cluster.name")
+
+	// Get all k8s-* containers first
 	filter := fmt.Sprintf("name=%s", config.ContainerNamePrefix)
-	containers, err := podmanClient.ContainerList(ctx, filter)
+	allContainers, err := podmanClient.ContainerList(ctx, filter)
 	if err != nil {
 		return fmt.Errorf("listing containers: %w", err)
+	}
+
+	// Filter containers based on cluster name
+	var containers []string
+	if clusterName != "" && clusterName != config.DefaultNetworkName {
+		// Named cluster: only include k8s-{cluster}-* containers
+		prefix := fmt.Sprintf("%s%s-", config.ContainerNamePrefix, clusterName)
+		for _, container := range allContainers {
+			if container != "" && hasPrefix(container, prefix) {
+				containers = append(containers, container)
+			}
+		}
+		logger.Infof("Stopping cluster: %s", clusterName)
+	} else {
+		// Default cluster: only include k8s-* containers WITHOUT a cluster name
+		// (i.e., containers that don't have a hyphen after the k8s- prefix before the node name)
+		for _, container := range allContainers {
+			if container != "" && isDefaultClusterContainer(container) {
+				containers = append(containers, container)
+			}
+		}
+		logger.Info("Stopping default cluster")
 	}
 
 	if len(containers) == 0 {
@@ -125,4 +151,32 @@ func removeClusterData(logger *logrus.Logger, containers []string) error {
 	}
 
 	return nil
+}
+
+// hasPrefix checks if a string starts with the given prefix
+func hasPrefix(s, prefix string) bool {
+	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+// isDefaultClusterContainer checks if a container name belongs to the default cluster
+// Default cluster containers have the format: k8s-<node> (e.g., k8s-node1)
+// Named cluster containers have the format: k8s-<cluster>-<node> (e.g., k8s-mycluster-node1)
+func isDefaultClusterContainer(name string) bool {
+	if !hasPrefix(name, config.ContainerNamePrefix) {
+		return false
+	}
+
+	// Remove the k8s- prefix
+	remainder := name[len(config.ContainerNamePrefix):]
+
+	// If the remainder contains a hyphen, it's a named cluster container
+	// (e.g., "mycluster-node1" has a hyphen)
+	// Default cluster containers have no hyphen (e.g., "node1")
+	for i := 0; i < len(remainder); i++ {
+		if remainder[i] == '-' {
+			return false
+		}
+	}
+
+	return true
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/bootc-dev/bink/internal/config"
 	"github.com/bootc-dev/bink/internal/podman"
@@ -44,7 +45,15 @@ func runExpose(ctx context.Context, logger *logrus.Logger, nodeName, kubeconfigP
 	logger.Info("=== Exposing API server to localhost:6443 ===")
 	logger.Info("")
 
-	containerName := config.ContainerNamePrefix + nodeName
+	// Build cluster-aware container name
+	clusterName := viper.GetString("cluster.name")
+	var containerName string
+	if clusterName != "" && clusterName != config.DefaultNetworkName {
+		containerName = fmt.Sprintf("%s%s-%s", config.ContainerNamePrefix, clusterName, nodeName)
+	} else {
+		containerName = config.ContainerNamePrefix + nodeName
+	}
+
 	podmanClient := podman.NewClient()
 
 	exists, err := podmanClient.ContainerExists(ctx, containerName)

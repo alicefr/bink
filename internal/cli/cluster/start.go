@@ -9,6 +9,7 @@ import (
 	"github.com/bootc-dev/bink/internal/node"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 func newStartCmd() *cobra.Command {
@@ -43,8 +44,10 @@ func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string) er
 	logger.Info("Step 2: Creating control plane node (node1)...")
 	logger.Infof("VM images container: %s", imagesImage)
 
+	clusterName := viper.GetString("cluster.name")
 	controlPlane := node.NewWithConfig("node1", true, node.Config{
 		ImagesImage: imagesImage,
+		ClusterName: clusterName,
 	})
 
 	exists, err := controlPlane.Exists(ctx)
@@ -63,7 +66,7 @@ func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string) er
 
 	logger.Info("Step 3: Initializing Kubernetes cluster...")
 	clusterMgr := cluster.New(cluster.Config{
-		Name:         "bink",
+		Name:         clusterName,
 		ControlPlane: "node1",
 		Logger:       logger,
 	})

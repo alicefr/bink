@@ -12,6 +12,7 @@ import (
 // Config holds node configuration options
 type Config struct {
 	ImagesImage string
+	ClusterName string
 }
 
 type Node struct {
@@ -34,7 +35,15 @@ func New(name string, isControlPlane bool) *Node {
 }
 
 func NewWithConfig(name string, isControlPlane bool, cfg Config) *Node {
-	containerName := config.ContainerNamePrefix + name
+	// Build container name with cluster name for uniqueness
+	var containerName string
+	if cfg.ClusterName != "" && cfg.ClusterName != config.DefaultNetworkName {
+		// Use cluster-specific name: k8s-{cluster}-{node}
+		containerName = config.ContainerNamePrefix + cfg.ClusterName + "-" + name
+	} else {
+		// Default: k8s-{node}
+		containerName = config.ContainerNamePrefix + name
+	}
 
 	if cfg.ImagesImage == "" {
 		cfg.ImagesImage = config.DefaultBootcImagesImage

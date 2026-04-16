@@ -58,7 +58,7 @@ func (c *Cluster) GetName() string {
 func (c *Cluster) WaitForCloudInit(ctx context.Context, nodeName string, timeout time.Duration) error {
 	c.logger.Infof("Waiting for cloud-init to complete on %s...", nodeName)
 
-	sshClient := ssh.NewClientForNode(nodeName, c.logger)
+	sshClient := ssh.NewClientForNode(c.name, nodeName, c.logger)
 
 	// First wait for SSH to be ready
 	if err := sshClient.WaitForSSH(ctx, 30); err != nil {

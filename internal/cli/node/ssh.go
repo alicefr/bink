@@ -6,6 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/bootc-dev/bink/internal/node"
 	"github.com/bootc-dev/bink/internal/ssh"
@@ -32,8 +33,11 @@ func runSSH(cmd *cobra.Command, args []string) error {
 	// Get node IP for display
 	clusterIP := node.CalculateClusterIP(nodeName)
 
+	// Get cluster name
+	clusterName := viper.GetString("cluster.name")
+
 	// Create SSH client
-	sshClient := ssh.NewClientForNode(nodeName, logger)
+	sshClient := ssh.NewClientForNode(clusterName, nodeName, logger)
 
 	fmt.Printf("Connecting to %s (SSH: %s:%s, cluster: %s) as user core\n",
 		nodeName, ssh.DefaultSSHHost, ssh.DefaultSSHPort, clusterIP)

@@ -12,14 +12,16 @@ import (
 
 // Manager handles DNS entry management for the cluster
 type Manager struct {
-	dnsServer string
-	logger    *logrus.Logger
+	clusterName string
+	dnsServer   string
+	logger      *logrus.Logger
 }
 
 // Config holds DNS manager configuration
 type Config struct {
-	DNSServer string // Node name running dnsmasq (usually node1)
-	Logger    *logrus.Logger
+	ClusterName string // Cluster name
+	DNSServer   string // Node name running dnsmasq (usually node1)
+	Logger      *logrus.Logger
 }
 
 // NewManager creates a new DNS manager
@@ -32,8 +34,9 @@ func NewManager(cfg Config) *Manager {
 	}
 
 	return &Manager{
-		dnsServer: cfg.DNSServer,
-		logger:    cfg.Logger,
+		clusterName: cfg.ClusterName,
+		dnsServer:   cfg.DNSServer,
+		logger:      cfg.Logger,
 	}
 }
 
@@ -46,7 +49,7 @@ func (m *Manager) AddEntry(ctx context.Context, nodeName string) error {
 	m.logger.Infof("DNS Server: %s", m.dnsServer)
 
 	// Create SSH client for DNS server
-	sshClient := ssh.NewClientForNode(m.dnsServer, m.logger)
+	sshClient := ssh.NewClientForNode(m.clusterName, m.dnsServer, m.logger)
 
 	// Check if dnsmasq is installed
 	output, err := sshClient.Exec(ctx, "rpm -q dnsmasq >/dev/null 2>&1 && echo 'yes' || echo 'no'")
