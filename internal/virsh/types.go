@@ -6,7 +6,15 @@ type VirtInstallOptions struct {
 	VCPUs            int
 	Disks            []string
 	Networks         []NetworkConfig
+	Filesystems      []FilesystemConfig
 	XMLModifications []string
+}
+
+type FilesystemConfig struct {
+	Source     string // Host path (in container)
+	Target     string // Mount tag name for guest
+	AccessMode string // mapped, passthrough, squash (default: passthrough)
+	ReadOnly   bool
 }
 
 type NetworkConfig struct {

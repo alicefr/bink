@@ -56,6 +56,26 @@ func (c *Client) VirtInstall(ctx context.Context, opts *VirtInstallOptions) erro
 		args = append(args, "--network", netArg)
 	}
 
+	for _, fs := range opts.Filesystems {
+		// Build filesystem argument for virt-install
+		// Format: type=mount,source=/path,target=tag,mode=mapped,readonly=on
+		fsArg := "type=mount"
+		fsArg += fmt.Sprintf(",source=%s", fs.Source)
+		fsArg += fmt.Sprintf(",target=%s", fs.Target)
+
+		if fs.AccessMode != "" {
+			fsArg += fmt.Sprintf(",accessmode=%s", fs.AccessMode)
+		} else {
+			fsArg += ",accessmode=passthrough"
+		}
+
+		if fs.ReadOnly {
+			fsArg += ",readonly=on"
+		}
+
+		args = append(args, "--filesystem", fsArg)
+	}
+
 	for _, xml := range opts.XMLModifications {
 		args = append(args, "--xml", xml)
 	}

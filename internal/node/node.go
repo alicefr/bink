@@ -17,16 +17,17 @@ type Config struct {
 }
 
 type Node struct {
-	Name           string
-	ContainerName  string
-	ClusterIP      string
-	ClusterMAC     string
-	IsControlPlane bool
-	Memory         int
-	VCPUs          int
-	BaseDisk       string
-	ImagesImage    string
-	APIPort        int // Configured API port (0 = auto-assign)
+	Name            string
+	ContainerName   string
+	ClusterName     string
+	ClusterIP       string
+	ClusterMAC      string
+	IsControlPlane  bool
+	Memory          int
+	VCPUs           int
+	BaseDisk        string
+	ImagesImage     string
+	APIPort         int // Configured API port (0 = auto-assign)
 	AssignedAPIPort int // Actual assigned port after container creation
 
 	podman *podman.Client
@@ -69,6 +70,7 @@ func NewWithConfig(name string, isControlPlane bool, cfg Config) *Node {
 	return &Node{
 		Name:            name,
 		ContainerName:   containerName,
+		ClusterName:     cfg.ClusterName,
 		ClusterIP:       CalculateClusterIP(name),
 		ClusterMAC:      CalculateClusterMAC(name),
 		IsControlPlane:  isControlPlane,

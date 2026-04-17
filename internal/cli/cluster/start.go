@@ -43,10 +43,22 @@ func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string, ap
 	}
 	logger.Info("")
 
-	logger.Info("Step 2: Creating control plane node (node1)...")
-	logger.Infof("VM images container: %s", imagesImage)
-
 	clusterName := viper.GetString("cluster.name")
+
+	logger.Info("Step 2: Preparing cluster images volume...")
+	clusterMgr := cluster.New(cluster.Config{
+		Name:         clusterName,
+		ControlPlane: "node1",
+		Logger:       logger,
+	})
+
+	if err := clusterMgr.EnsureImagesVolume(ctx); err != nil {
+		return fmt.Errorf("ensuring images volume: %w", err)
+	}
+	logger.Info("")
+
+	logger.Info("Step 3: Creating control plane node (node1)...")
+	logger.Infof("VM images container: %s", imagesImage)
 
 	// Convert 0 to -1 for auto-assign (to distinguish from unset)
 	if apiPort == 0 {
@@ -73,12 +85,7 @@ func runStart(ctx context.Context, logger *logrus.Logger, imagesImage string, ap
 	}
 	logger.Info("")
 
-	logger.Info("Step 3: Initializing Kubernetes cluster...")
-	clusterMgr := cluster.New(cluster.Config{
-		Name:         clusterName,
-		ControlPlane: "node1",
-		Logger:       logger,
-	})
+	logger.Info("Step 4: Initializing Kubernetes cluster...")
 
 	if err := clusterMgr.Init(ctx, cluster.InitOptions{
 		NodeName: "node1",

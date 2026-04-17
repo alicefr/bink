@@ -23,6 +23,12 @@ func (n *Node) createContainer(ctx context.Context) error {
 	logrus.Infof("Creating container %s", n.ContainerName)
 	logrus.Infof("Using images container: %s", n.ImagesImage)
 
+	// Determine cluster images volume name
+	clusterImagesVolume := "cluster-images"
+	if n.ClusterName != "" && n.ClusterName != "podman" {
+		clusterImagesVolume = fmt.Sprintf("%s-cluster-images", n.ClusterName)
+	}
+
 	opts := &podman.ContainerCreateOptions{
 		Name:    n.ContainerName,
 		Image:   config.DefaultClusterImage,
@@ -33,6 +39,7 @@ func (n *Node) createContainer(ctx context.Context) error {
 		},
 		Volumes: []string{
 			"cluster-keys:/var/run/cluster:z",
+			fmt.Sprintf("%s:/var/lib/cluster-images:z,ro", clusterImagesVolume),
 		},
 	}
 
@@ -154,6 +161,14 @@ func (n *Node) createVM(ctx context.Context) error {
 				Type:  "mcast",
 				Model: "virtio",
 				MAC:   n.ClusterMAC,
+			},
+		},
+		Filesystems: []virsh.FilesystemConfig{
+			{
+				Source:     "/var/lib/cluster-images",
+				Target:     "cluster_images",
+				AccessMode: "passthrough",
+				ReadOnly:   true,
 			},
 		},
 		XMLModifications: []string{
