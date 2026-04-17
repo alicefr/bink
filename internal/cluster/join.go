@@ -39,7 +39,7 @@ func (c *Cluster) Join(ctx context.Context, opts JoinOptions) error {
 	c.logger.Infof("=== Generating %s join command from %s ===", nodeType, controlPlane)
 
 	// Create SSH client for control plane
-	cpSSHClient := ssh.NewClientForNode(controlPlane, c.logger)
+	cpSSHClient := ssh.NewClientForNode(c.name, controlPlane, c.logger)
 
 	// Generate join command
 	joinCommand, err := c.generateJoinCommand(ctx, cpSSHClient, opts.IsControlPlane)
@@ -61,7 +61,7 @@ func (c *Cluster) Join(ctx context.Context, opts JoinOptions) error {
 	c.logger.Infof("=== Joining %s to the cluster ===", nodeName)
 
 	// Create SSH client for the new node
-	nodeSSHClient := ssh.NewClientForNode(nodeName, c.logger)
+	nodeSSHClient := ssh.NewClientForNode(c.name, nodeName, c.logger)
 
 	// Execute join command
 	if err := nodeSSHClient.ExecWithOutput(ctx, fmt.Sprintf("sudo %s", joinCommand)); err != nil {

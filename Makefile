@@ -1,4 +1,4 @@
-.PHONY: all build-bink build-vm-image build-cluster-image build-disk build-images-container clean clean-disk rebuild help
+.PHONY: all build-bink build-vm-image build-cluster-image build-disk build-images-container clean clean-disk rebuild help test-integration test-integration-quick test-unit test-all
 
 # Image names and tags
 BOOTC_IMAGE := localhost/fedora-bootc-k8s:latest
@@ -76,6 +76,26 @@ clean-disk:
 # Rebuild everything from scratch
 rebuild: clean all
 
+# Test targets
+GINKGO := $(shell which ginkgo 2>/dev/null || echo "$(HOME)/go/bin/ginkgo")
+
+test-integration:
+	@test -f ./$(BINK_BINARY) || (echo "Error: bink binary not found. Run 'make build-bink' first" && exit 1)
+	@echo "=== Running Integration Tests ==="
+	$(GINKGO) -v --procs=3 --randomize-all --randomize-suites test/integration/
+
+test-integration-quick:
+	@test -f ./$(BINK_BINARY) || (echo "Error: bink binary not found. Run 'make build-bink' first" && exit 1)
+	@echo "=== Running Quick Integration Tests ==="
+	$(GINKGO) -v --focus="quick" test/integration/
+
+test-unit:
+	@echo "=== Running Unit Tests ==="
+	go test -v -race ./internal/...
+
+test-all: test-unit test-integration
+	@echo "✅ All tests passed"
+
 help:
 	@echo "Makefile for building bootc images, cluster images, and bink CLI"
 	@echo ""
@@ -91,6 +111,12 @@ help:
 	@echo "  clean                    - Remove all built images and disk"
 	@echo "  clean-disk               - Remove only the disk image"
 	@echo "  rebuild                  - Clean and rebuild everything"
+	@echo ""
+	@echo "Test Targets:"
+	@echo "  test-integration         - Run all integration tests"
+	@echo "  test-integration-quick   - Run quick integration tests only"
+	@echo "  test-unit                - Run unit tests"
+	@echo "  test-all                 - Run both unit and integration tests"
 	@echo ""
 	@echo "Outputs:"
 	@echo "  Binary:         $(BINK_BINARY)"

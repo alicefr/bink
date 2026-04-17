@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -120,9 +121,13 @@ func (c *Client) CopyTo(ctx context.Context, localPath, remotePath string) error
 	return nil
 }
 
-// WaitForSSH waits for SSH to become available
+// WaitForSSH waits for SSH to become available using exponential backoff
 func (c *Client) WaitForSSH(ctx context.Context, maxRetries int) error {
 	c.logger.Infof("Waiting for SSH to be ready on %s...", c.host)
+
+	// Exponential backoff: 1s, 2s, 4s, 8s, 10s (capped)
+	backoff := 1 * time.Second
+	const maxBackoff = 10 * time.Second
 
 	for i := 1; i <= maxRetries; i++ {
 		if err := ctx.Err(); err != nil {
@@ -133,6 +138,7 @@ func (c *Client) WaitForSSH(ctx context.Context, maxRetries int) error {
 		sshArgs = append(sshArgs, "-o", "ConnectTimeout=2")
 
 		cmd := exec.CommandContext(ctx, "podman", append([]string{"exec", c.containerName, "ssh"}, sshArgs...)...)
+		c.logger.Debugf("SSH check attempt %d/%d (backoff: %v)", i, maxRetries, backoff)
 
 		if err := cmd.Run(); err == nil {
 			c.logger.Info("✓ SSH is ready")
@@ -143,7 +149,12 @@ func (c *Client) WaitForSSH(ctx context.Context, maxRetries int) error {
 			return fmt.Errorf("timeout waiting for SSH to be ready after %d attempts", maxRetries)
 		}
 
-		c.logger.Debug(".")
+		// Exponential backoff with cap
+		time.Sleep(backoff)
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
 	}
 
 	return nil

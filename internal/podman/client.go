@@ -178,3 +178,26 @@ func (c *Client) VolumeRemove(ctx context.Context, name string) error {
 	logrus.Debugf("Removing volume %s", name)
 	return util.RunCommandQuiet(ctx, "podman", "volume", "rm", name)
 }
+
+func (c *Client) GetPublishedPort(ctx context.Context, containerName, containerPort string) (int, error) {
+	// Get the published port mapping using inspect
+	// Format: {{range .NetworkSettings.Ports}}{{if eq .ContainerPort 6443}}{{.HostPort}}{{end}}{{end}}
+	format := fmt.Sprintf("{{(index (index .NetworkSettings.Ports \"%s\") 0).HostPort}}", containerPort)
+	output, err := util.RunCommandOutput(ctx, "podman", "inspect", "-f", format, containerName)
+	if err != nil {
+		return 0, fmt.Errorf("inspecting container ports: %w", err)
+	}
+
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return 0, fmt.Errorf("no published port found for %s", containerPort)
+	}
+
+	port := 0
+	_, err = fmt.Sscanf(output, "%d", &port)
+	if err != nil {
+		return 0, fmt.Errorf("parsing port number %q: %w", output, err)
+	}
+
+	return port, nil
+}

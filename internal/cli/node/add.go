@@ -6,6 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	"github.com/bootc-dev/bink/internal/cluster"
 	"github.com/bootc-dev/bink/internal/dns"
@@ -54,8 +55,10 @@ func runAdd(ctx context.Context, nodeName, controlPlane, imagesImage, role strin
 	logger.Infof("Step 1: Creating %s node...", role)
 	logger.Infof("VM images container: %s", imagesImage)
 
+	clusterName := viper.GetString("cluster.name")
 	newNode := node.NewWithConfig(nodeName, isControlPlane, node.Config{
 		ImagesImage: imagesImage,
+		ClusterName: clusterName,
 	})
 
 	exists, err := newNode.Exists(ctx)
@@ -75,8 +78,9 @@ func runAdd(ctx context.Context, nodeName, controlPlane, imagesImage, role strin
 	// Step 2: Add DNS entry
 	logger.Info("Step 2: Adding DNS entry...")
 	dnsMgr := dns.NewManager(dns.Config{
-		DNSServer: controlPlane,
-		Logger:    logger,
+		ClusterName: clusterName,
+		DNSServer:   controlPlane,
+		Logger:      logger,
 	})
 
 	if err := dnsMgr.AddEntry(ctx, nodeName); err != nil {
@@ -87,7 +91,7 @@ func runAdd(ctx context.Context, nodeName, controlPlane, imagesImage, role strin
 	// Step 3: Join to cluster
 	logger.Info("Step 3: Joining node to cluster...")
 	clusterMgr := cluster.New(cluster.Config{
-		Name:         "bink",
+		Name:         clusterName,
 		ControlPlane: controlPlane,
 		Logger:       logger,
 	})
