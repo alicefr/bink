@@ -7,6 +7,7 @@ import (
 	"github.com/bootc-dev/bink/internal/config"
 	"github.com/bootc-dev/bink/internal/podman"
 	"github.com/bootc-dev/bink/internal/virsh"
+	"github.com/bootc-dev/bink/internal/virtiofsd"
 )
 
 // Config holds node configuration options
@@ -17,20 +18,22 @@ type Config struct {
 }
 
 type Node struct {
-	Name           string
-	ContainerName  string
-	ClusterIP      string
-	ClusterMAC     string
-	IsControlPlane bool
-	Memory         int
-	VCPUs          int
-	BaseDisk       string
-	ImagesImage    string
-	APIPort        int // Configured API port (0 = auto-assign)
+	Name            string
+	ContainerName   string
+	ClusterName     string
+	ClusterIP       string
+	ClusterMAC      string
+	IsControlPlane  bool
+	Memory          int
+	VCPUs           int
+	BaseDisk        string
+	ImagesImage     string
+	APIPort         int // Configured API port (0 = auto-assign)
 	AssignedAPIPort int // Actual assigned port after container creation
 
-	podman *podman.Client
-	virsh  *virsh.Client
+	podman       *podman.Client
+	virsh        *virsh.Client
+	virtiofsdMgr *virtiofsd.Manager
 }
 
 func New(name string, isControlPlane bool) *Node {
@@ -69,6 +72,7 @@ func NewWithConfig(name string, isControlPlane bool, cfg Config) *Node {
 	return &Node{
 		Name:            name,
 		ContainerName:   containerName,
+		ClusterName:     cfg.ClusterName,
 		ClusterIP:       CalculateClusterIP(name),
 		ClusterMAC:      CalculateClusterMAC(name),
 		IsControlPlane:  isControlPlane,
@@ -90,6 +94,11 @@ func (n *Node) Create(ctx context.Context) error {
 
 	if err := n.setupSSHKeys(ctx); err != nil {
 		return fmt.Errorf("setting up SSH keys: %w", err)
+	}
+
+	// Setup virtiofsd to share container images
+	if err := n.setupVirtiofsd(ctx); err != nil {
+		return fmt.Errorf("setting up virtiofsd: %w", err)
 	}
 
 	if err := n.createOverlayDisk(ctx); err != nil {

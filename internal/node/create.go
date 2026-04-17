@@ -7,6 +7,7 @@ import (
 	"github.com/bootc-dev/bink/internal/config"
 	"github.com/bootc-dev/bink/internal/podman"
 	"github.com/bootc-dev/bink/internal/virsh"
+	"github.com/bootc-dev/bink/internal/virtiofsd"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,6 +24,12 @@ func (n *Node) createContainer(ctx context.Context) error {
 	logrus.Infof("Creating container %s", n.ContainerName)
 	logrus.Infof("Using images container: %s", n.ImagesImage)
 
+	// Determine cluster images volume name
+	clusterImagesVolume := "cluster-images"
+	if n.ClusterName != "" && n.ClusterName != "podman" {
+		clusterImagesVolume = fmt.Sprintf("%s-cluster-images", n.ClusterName)
+	}
+
 	opts := &podman.ContainerCreateOptions{
 		Name:    n.ContainerName,
 		Image:   config.DefaultClusterImage,
@@ -33,7 +40,11 @@ func (n *Node) createContainer(ctx context.Context) error {
 		},
 		Volumes: []string{
 			"cluster-keys:/var/run/cluster:z",
+			fmt.Sprintf("%s:/var/lib/cluster-images:z,ro", clusterImagesVolume),
 		},
+		// Enable privileges needed for virtiofsd
+		CapAdd:      []string{"SYS_ADMIN"},
+		SecurityOpt: []string{"label=disable"},
 	}
 
 	if n.IsControlPlane {
@@ -113,6 +124,34 @@ func (n *Node) setupSSHKeys(ctx context.Context) error {
 	return nil
 }
 
+func (n *Node) setupVirtiofsd(ctx context.Context) error {
+	logrus.Info("Setting up virtiofsd for cluster images")
+
+	// Socket path matches what libvirt expects
+	socketDir := fmt.Sprintf("/var/lib/libvirt/qemu/domain-1-%s", n.Name)
+	socketPath := fmt.Sprintf("%s/fs0-fs.sock", socketDir)
+
+	// Create virtiofsd manager with options based on podman-bootc approach
+	opts := &virtiofsd.Options{
+		ContainerName: n.ContainerName,
+		NodeName:      n.Name,
+		SharedDir:     "/var/lib/cluster-images",
+		SocketPath:    socketPath,
+		Cache:         "auto",
+		Sandbox:       "none",
+		ModCaps:       "-mknod", // Disable mknod capability to avoid kernel sync errors
+	}
+
+	n.virtiofsdMgr = virtiofsd.NewManager(n.podman, opts)
+
+	// Start the virtiofsd process with proper lifecycle management
+	if err := n.virtiofsdMgr.Start(ctx, opts); err != nil {
+		return fmt.Errorf("starting virtiofsd: %w", err)
+	}
+
+	return nil
+}
+
 func (n *Node) createOverlayDisk(ctx context.Context) error {
 	overlayPath := fmt.Sprintf("/workspace/%s.qcow2", n.Name)
 
@@ -156,9 +195,19 @@ func (n *Node) createVM(ctx context.Context) error {
 				MAC:   n.ClusterMAC,
 			},
 		},
+		Filesystems: []virsh.FilesystemConfig{
+			{
+				Source:     "/var/lib/cluster-images",
+				Target:     "cluster_images",
+				AccessMode: "passthrough",
+				ReadOnly:   false,
+			},
+		},
 		XMLModifications: []string{
 			"xpath.set=./devices/interface[2]/source/@address=" + config.MulticastAddr,
 			fmt.Sprintf("xpath.set=./devices/interface[2]/source/@port=%d", config.MulticastPort),
+			// Set socket type and path for externally managed virtiofsd
+			fmt.Sprintf("xpath.set=./devices/filesystem/source/@socket=/var/lib/libvirt/qemu/domain-1-%s/fs0-fs.sock", n.Name),
 		},
 	}
 

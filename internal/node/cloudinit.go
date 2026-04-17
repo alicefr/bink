@@ -75,9 +75,9 @@ func (n *Node) writeNetworkConfig(dir string) error {
 
 	content := fmt.Sprintf(`version: 2
 ethernets:
-  enp1s0:
-    dhcp4: true
   enp2s0:
+    dhcp4: true
+  enp3s0:
     dhcp4: false
     dhcp6: false
     addresses:
@@ -98,8 +98,8 @@ func (n *Node) writeUserData(dir, sshPubKey string) error {
 	if n.Name == "node1" {
 		dnsmasqConfig = fmt.Sprintf(`  - path: /etc/dnsmasq.d/cluster.conf
     content: |
-      interface=enp2s0
-      bind-interfaces
+      interface=enp3s0
+      bind-dynamic
       no-hosts
       addn-hosts=/var/lib/dnsmasq/cluster-hosts
       domain=%s
@@ -113,11 +113,27 @@ func (n *Node) writeUserData(dir, sshPubKey string) error {
     permissions: '0644'
     content: |
       %s %s %s.%s
+  - path: /etc/systemd/system/dnsmasq.service.d/wait-for-network.conf
+    content: |
+      [Unit]
+      After=network-online.target
+      Wants=network-online.target
 `, config.ClusterDomain, config.UpstreamDNS1, config.UpstreamDNS2,
-   n.ClusterIP, n.Name, n.Name, config.ClusterDomain)
+			n.ClusterIP, n.Name, n.Name, config.ClusterDomain)
 
 		dnsmasqRuncmd = `  - chown dnsmasq:dnsmasq /var/lib/dnsmasq/cluster-hosts
-  - restorecon -v /var/lib/dnsmasq/cluster-hosts
+  - restorecon -v /var/lib/dnsmasq/cluster-hosts || true
+  - systemctl daemon-reload
+  - |
+    # Wait for enp3s0 to be up before starting dnsmasq
+    for i in {1..30}; do
+      if ip link show enp3s0 | grep -q "state UP"; then
+        echo "enp3s0 is up"
+        break
+      fi
+      echo "Waiting for enp3s0... ($i/30)"
+      sleep 1
+    done
   - systemctl enable --now dnsmasq`
 	}
 
@@ -140,6 +156,30 @@ write_files:
   - path: /etc/sysconfig/kubelet
     content: |
       KUBELET_EXTRA_ARGS=--volume-plugin-dir=/var/lib/kubelet/volumeplugins
+  - path: /etc/containers/storage.conf
+    content: |
+      [storage]
+      driver = "overlay"
+      runroot = "/run/containers/storage"
+      graphroot = "/var/lib/containers/storage"
+
+      [storage.options]
+      additionalimagestores = [
+        "/var/mnt/cluster_images",
+      ]
+  - path: /etc/systemd/system/var-mnt-cluster_images.mount
+    content: |
+      [Unit]
+      Description=Mount cluster images via virtiofs
+      Before=crio.service
+
+      [Mount]
+      What=cluster_images
+      Where=/var/mnt/cluster_images
+      Type=virtiofs
+
+      [Install]
+      WantedBy=multi-user.target
 %s
 runcmd:
   - swapoff -a
@@ -149,15 +189,19 @@ runcmd:
   - sysctl -w net.ipv4.ip_forward=1
   - echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-kubernetes.conf
   - mkdir -p /var/lib/kubelet/volumeplugins
+  - mkdir -p /var/mnt/cluster_images
+  - mkdir -p /var/lib/containers/storage
+  - systemctl daemon-reload
+  - systemctl enable --now var-mnt-cluster_images.mount
   - systemctl enable --now ostree-state-overlay@opt.service
   - systemctl enable --now qemu-guest-agent
-  - nmcli connection modify "cloud-init enp2s0" ipv4.dns-search "~%s %s"
-  - nmcli connection up "cloud-init enp2s0"
+  - nmcli connection modify "cloud-init enp3s0" ipv4.dns-search "~%s %s"
+  - nmcli connection up "cloud-init enp3s0"
 %s
   - systemctl enable --now crio
   - systemctl enable kubelet
 `, n.Name, config.DefaultSSHUser, sshPubKey, dnsmasqConfig,
-   config.ClusterDomain, config.ClusterDomain, dnsmasqRuncmd)
+		config.ClusterDomain, config.ClusterDomain, dnsmasqRuncmd)
 
 	return os.WriteFile(filepath.Join(dir, "user-data"), []byte(content), 0644)
 }

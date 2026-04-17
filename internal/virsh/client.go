@@ -38,6 +38,11 @@ func (c *Client) VirtInstall(ctx context.Context, opts *VirtInstallOptions) erro
 		"--noautoconsole",
 	}
 
+	// Add shared memory support if filesystems are present (required for virtiofs)
+	if len(opts.Filesystems) > 0 {
+		args = append(args, "--memorybacking", "source.type=memfd,access.mode=shared")
+	}
+
 	for _, disk := range opts.Disks {
 		args = append(args, "--disk", disk)
 	}
@@ -54,6 +59,19 @@ func (c *Client) VirtInstall(ctx context.Context, opts *VirtInstallOptions) erro
 			netArg += fmt.Sprintf(",portForward=%s", network.PortForward)
 		}
 		args = append(args, "--network", netArg)
+	}
+
+	for _, fs := range opts.Filesystems {
+		// Build filesystem argument for virt-install
+		// Explicitly specify virtiofs driver
+		fsArg := fmt.Sprintf("source.dir=%s,target.dir=%s,driver.type=virtiofs",
+			fs.Source, fs.Target)
+
+		if fs.ReadOnly {
+			fsArg += ",readonly=on"
+		}
+
+		args = append(args, "--filesystem", fsArg)
 	}
 
 	for _, xml := range opts.XMLModifications {
