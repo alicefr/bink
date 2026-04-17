@@ -72,6 +72,26 @@ func (m *Manager) Start(ctx context.Context, opts *Options) error {
 		return fmt.Errorf("changing socket directory ownership: %w", err)
 	}
 
+	// For Podman volumes, copy to a temp location with proper ownership
+	// This allows qemu user to access the files
+	tempDir := fmt.Sprintf("/tmp/cluster-images-%s", m.nodeName)
+
+	// Create temp directory and copy files if not already done
+	copyCmd := []string{"sh", "-c", fmt.Sprintf(`
+		if [ ! -d %s ]; then
+			mkdir -p %s
+			cp -a %s/. %s/
+			chown -R qemu:qemu %s
+		fi
+	`, tempDir, tempDir, m.sharedDir, tempDir, tempDir)}
+
+	if err := m.podman.ContainerExecQuiet(ctx, m.containerName, copyCmd); err != nil {
+		logrus.Warnf("Failed to prepare shared directory: %v", err)
+	} else {
+		// Use the temp directory instead
+		m.sharedDir = tempDir
+	}
+
 	// Build virtiofsd command with proper backgrounding and PID tracking
 	// Run as qemu user to avoid capability manipulation issues in containers
 	virtiofsdCmd := fmt.Sprintf(

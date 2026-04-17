@@ -96,7 +96,7 @@ func (n *Node) Create(ctx context.Context) error {
 		return fmt.Errorf("setting up SSH keys: %w", err)
 	}
 
-	// Start virtiofsd ourselves with managed=no in the VM config
+	// Setup virtiofsd to share container images
 	if err := n.setupVirtiofsd(ctx); err != nil {
 		return fmt.Errorf("setting up virtiofsd: %w", err)
 	}

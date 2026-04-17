@@ -19,6 +19,7 @@ nodeRegistration:
 ---
 apiVersion: kubeadm.k8s.io/v1beta3
 kind: ClusterConfiguration
+kubernetesVersion: "v1.35.0"
 apiServer:
   certSANs:
   - "localhost"

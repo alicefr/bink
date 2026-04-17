@@ -165,9 +165,9 @@ write_files:
 
       [storage.options]
       additionalimagestores = [
-        "/mnt/cluster-images",
+        "/var/mnt/cluster_images",
       ]
-  - path: /etc/systemd/system/mnt-cluster-images.mount
+  - path: /etc/systemd/system/var-mnt-cluster_images.mount
     content: |
       [Unit]
       Description=Mount cluster images via virtiofs
@@ -175,9 +175,8 @@ write_files:
 
       [Mount]
       What=cluster_images
-      Where=/mnt/cluster-images
+      Where=/var/mnt/cluster_images
       Type=virtiofs
-      Options=ro
 
       [Install]
       WantedBy=multi-user.target
@@ -190,10 +189,10 @@ runcmd:
   - sysctl -w net.ipv4.ip_forward=1
   - echo 'net.ipv4.ip_forward=1' > /etc/sysctl.d/99-kubernetes.conf
   - mkdir -p /var/lib/kubelet/volumeplugins
-  - mkdir -p /mnt/cluster-images
+  - mkdir -p /var/mnt/cluster_images
   - mkdir -p /var/lib/containers/storage
   - systemctl daemon-reload
-  - systemctl enable --now mnt-cluster-images.mount
+  - systemctl enable --now var-mnt-cluster_images.mount
   - systemctl enable --now ostree-state-overlay@opt.service
   - systemctl enable --now qemu-guest-agent
   - nmcli connection modify "cloud-init enp3s0" ipv4.dns-search "~%s %s"

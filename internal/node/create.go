@@ -200,7 +200,7 @@ func (n *Node) createVM(ctx context.Context) error {
 				Source:     "/var/lib/cluster-images",
 				Target:     "cluster_images",
 				AccessMode: "passthrough",
-				ReadOnly:   true,
+				ReadOnly:   false,
 			},
 		},
 		XMLModifications: []string{
