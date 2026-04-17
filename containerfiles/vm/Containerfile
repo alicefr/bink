@@ -18,7 +18,9 @@ RUN dnf install -y \
 
 COPY qemu.conf /etc/libvirt/qemu.conf
 COPY virtqemud.conf /etc/libvirt/virtqemud.conf
+COPY virtiofsd-wrapper /usr/local/bin/virtiofsd-wrapper
 COPY entrypoint.sh /entrypoint.sh
 
+RUN chmod +x /usr/local/bin/virtiofsd-wrapper
 RUN mkdir -p /home/qemu && chown -R qemu:qemu /home/qemu
 ENTRYPOINT ["/entrypoint.sh"]

@@ -77,6 +77,18 @@ func (c *Client) ContainerCreate(ctx context.Context, opts *ContainerCreateOptio
 		args = append(args, "--network", opts.Network)
 	}
 
+	if opts.Privileged {
+		args = append(args, "--privileged")
+	}
+
+	for _, cap := range opts.CapAdd {
+		args = append(args, "--cap-add", cap)
+	}
+
+	for _, secOpt := range opts.SecurityOpt {
+		args = append(args, "--security-opt", secOpt)
+	}
+
 	for _, device := range opts.Devices {
 		args = append(args, "--device", device)
 	}

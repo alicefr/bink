@@ -119,7 +119,7 @@ func (n *Node) writeUserData(dir, sshPubKey string) error {
       After=network-online.target
       Wants=network-online.target
 `, config.ClusterDomain, config.UpstreamDNS1, config.UpstreamDNS2,
-   n.ClusterIP, n.Name, n.Name, config.ClusterDomain)
+			n.ClusterIP, n.Name, n.Name, config.ClusterDomain)
 
 		dnsmasqRuncmd = `  - chown dnsmasq:dnsmasq /var/lib/dnsmasq/cluster-hosts
   - restorecon -v /var/lib/dnsmasq/cluster-hosts || true
@@ -167,7 +167,7 @@ write_files:
       additionalimagestores = [
         "/mnt/cluster-images",
       ]
-  - path: /etc/systemd/system/mnt-cluster\\x2dimages.mount
+  - path: /etc/systemd/system/mnt-cluster-images.mount
     content: |
       [Unit]
       Description=Mount cluster images via virtiofs
@@ -193,7 +193,7 @@ runcmd:
   - mkdir -p /mnt/cluster-images
   - mkdir -p /var/lib/containers/storage
   - systemctl daemon-reload
-  - systemctl enable --now mnt-cluster\\x2dimages.mount
+  - systemctl enable --now mnt-cluster-images.mount
   - systemctl enable --now ostree-state-overlay@opt.service
   - systemctl enable --now qemu-guest-agent
   - nmcli connection modify "cloud-init enp3s0" ipv4.dns-search "~%s %s"
@@ -202,7 +202,7 @@ runcmd:
   - systemctl enable --now crio
   - systemctl enable kubelet
 `, n.Name, config.DefaultSSHUser, sshPubKey, dnsmasqConfig,
-   config.ClusterDomain, config.ClusterDomain, dnsmasqRuncmd)
+		config.ClusterDomain, config.ClusterDomain, dnsmasqRuncmd)
 
 	return os.WriteFile(filepath.Join(dir, "user-data"), []byte(content), 0644)
 }

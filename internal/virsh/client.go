@@ -38,6 +38,11 @@ func (c *Client) VirtInstall(ctx context.Context, opts *VirtInstallOptions) erro
 		"--noautoconsole",
 	}
 
+	// Add shared memory support if filesystems are present (required for virtiofs)
+	if len(opts.Filesystems) > 0 {
+		args = append(args, "--memorybacking", "source.type=memfd,access.mode=shared")
+	}
+
 	for _, disk := range opts.Disks {
 		args = append(args, "--disk", disk)
 	}
@@ -58,16 +63,9 @@ func (c *Client) VirtInstall(ctx context.Context, opts *VirtInstallOptions) erro
 
 	for _, fs := range opts.Filesystems {
 		// Build filesystem argument for virt-install
-		// Format: type=mount,source=/path,target=tag,mode=mapped,readonly=on
-		fsArg := "type=mount"
-		fsArg += fmt.Sprintf(",source=%s", fs.Source)
-		fsArg += fmt.Sprintf(",target=%s", fs.Target)
-
-		if fs.AccessMode != "" {
-			fsArg += fmt.Sprintf(",accessmode=%s", fs.AccessMode)
-		} else {
-			fsArg += ",accessmode=passthrough"
-		}
+		// Explicitly specify virtiofs driver
+		fsArg := fmt.Sprintf("source.dir=%s,target.dir=%s,driver.type=virtiofs",
+			fs.Source, fs.Target)
 
 		if fs.ReadOnly {
 			fsArg += ",readonly=on"

@@ -7,6 +7,7 @@ import (
 	"github.com/bootc-dev/bink/internal/config"
 	"github.com/bootc-dev/bink/internal/podman"
 	"github.com/bootc-dev/bink/internal/virsh"
+	"github.com/bootc-dev/bink/internal/virtiofsd"
 )
 
 // Config holds node configuration options
@@ -30,8 +31,9 @@ type Node struct {
 	APIPort         int // Configured API port (0 = auto-assign)
 	AssignedAPIPort int // Actual assigned port after container creation
 
-	podman *podman.Client
-	virsh  *virsh.Client
+	podman       *podman.Client
+	virsh        *virsh.Client
+	virtiofsdMgr *virtiofsd.Manager
 }
 
 func New(name string, isControlPlane bool) *Node {
@@ -92,6 +94,11 @@ func (n *Node) Create(ctx context.Context) error {
 
 	if err := n.setupSSHKeys(ctx); err != nil {
 		return fmt.Errorf("setting up SSH keys: %w", err)
+	}
+
+	// Start virtiofsd ourselves with managed=no in the VM config
+	if err := n.setupVirtiofsd(ctx); err != nil {
+		return fmt.Errorf("setting up virtiofsd: %w", err)
 	}
 
 	if err := n.createOverlayDisk(ctx); err != nil {

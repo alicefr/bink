@@ -1,0 +1,14 @@
+#!/bin/bash
+# Wrapper for virtiofsd in container environment
+# Run as qemu user to avoid capability manipulation issues
+
+# Log the invocation for debugging
+echo "[$(date)] virtiofsd-wrapper called by UID=$(id -u) with args: $@" >> /tmp/virtiofsd-wrapper.log
+
+# Always run as qemu user to avoid capability issues
+# virtiofsd tries to drop privileges when run as root, which fails in containers
+exec runuser -u qemu -- /usr/libexec/virtiofsd \
+  --sandbox=none \
+  --cache=auto \
+  --modcaps=-mknod \
+  "$@"
