@@ -1,0 +1,13 @@
+ARG CLUSTER_IMAGE=localhost/cluster:latest
+
+FROM quay.io/fedora/fedora:43 AS bcvk-builder
+ARG BCVK_VERSION=v0.14.0
+RUN dnf install -y cargo rust gcc openssl-devel && dnf clean all
+RUN cargo install --locked --root /usr/local --git https://github.com/bootc-dev/bcvk --tag ${BCVK_VERSION} bcvk
+
+FROM ${CLUSTER_IMAGE}
+RUN dnf install -y podman binutils && dnf clean all
+COPY --from=bcvk-builder /usr/local/bin/bcvk /usr/local/bin/bcvk
+RUN printf '[containers]\nnetns="host"\ncgroups="disabled"\n[engine]\ncgroup_manager="cgroupfs"\n' \
+    > /etc/containers/containers.conf
+ENTRYPOINT []
