@@ -20,6 +20,14 @@ func newStartCmd() *cobra.Command {
 		Short: "Start the local container registry",
 		Long:  "Start the shared local registry containers, creating them if they don't exist",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if registryUser != "" && registryPassword == "" {
+				p, err := readPassword()
+				if err != nil {
+					return err
+				}
+				registryPassword = p
+			}
+
 			authRequested, err := registrypkg.AuthRegistryRequested(registryUser, registryPassword)
 			if err != nil {
 				return fmt.Errorf("invalid auth registry credentials: %w", err)
