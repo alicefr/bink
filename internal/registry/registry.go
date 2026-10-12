@@ -202,7 +202,7 @@ func (m *Manager) RegistryInfo(ctx context.Context) (*RegistryStatus, error) {
 
 // EnsureAuthRegistry starts (or creates) the authenticated registry. Credentials are not
 // stored anywhere inspectable, so they cannot be compared against an already-running
-// container: to change them, stop the registry and start it again.
+// container: to change them, use UpdateAuthRegistryCredentials.
 func (m *Manager) EnsureAuthRegistry(ctx context.Context, username, password string) error {
 	logrus.Info("Ensuring authenticated registry is running")
 	if err := ValidateAuthCredentials(username, password); err != nil {
@@ -287,6 +287,31 @@ func (m *Manager) createAuthContainer(ctx context.Context, username, password st
 	if err != nil {
 		return fmt.Errorf("creating auth registry container: %w", err)
 	}
+	return nil
+}
+
+func (m *Manager) UpdateAuthRegistryCredentials(ctx context.Context, username, password string) error {
+	if err := ValidateAuthCredentials(username, password); err != nil {
+		return err
+	}
+
+	exists, err := m.podman.ContainerExists(ctx, config.AuthRegistryContainerName)
+	if err != nil {
+		return fmt.Errorf("checking auth registry container: %w", err)
+	}
+	if !exists {
+		return fmt.Errorf("auth registry container %q does not exist", config.AuthRegistryContainerName)
+	}
+
+	if err := m.StopAuthRegistry(ctx); err != nil {
+		return fmt.Errorf("stopping auth registry for credential update: %w", err)
+	}
+
+	if err := m.EnsureAuthRegistry(ctx, username, password); err != nil {
+		return fmt.Errorf("restarting auth registry with new credentials: %w", err)
+	}
+
+	logrus.Infof("Auth registry credentials updated for user %q", username)
 	return nil
 }
 
