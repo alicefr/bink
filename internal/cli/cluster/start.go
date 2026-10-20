@@ -21,17 +21,21 @@ import (
 	"github.com/spf13/viper"
 )
 
+type startOptions struct {
+	nodeName             string
+	nodeImage            string
+	apiPort              int
+	memory               int
+	maxMemory            int
+	exposePath           string
+	hostNetworkPopulator bool
+	targetImgRef         string
+	registryUser         string
+	registryPassword     string
+}
+
 func newStartCmd() *cobra.Command {
-	var nodeName string
-	var nodeImage string
-	var apiPort int
-	var memory int
-	var maxMemory int
-	var exposePath string
-	var hostNetworkPopulator bool
-	var targetImgRef string
-	var registryUser string
-	var registryPassword string
+	opts := &startOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "start",
@@ -47,26 +51,26 @@ func newStartCmd() *cobra.Command {
   bink cluster start --memory 4096 --expose ./kubeconfig`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			logger := logrus.New()
-			return runStart(cmd.Context(), logger, nodeName, nodeImage, apiPort, memory, maxMemory, exposePath, hostNetworkPopulator, targetImgRef, registryUser, registryPassword)
+			return runStart(cmd.Context(), logger, opts)
 		},
 	}
 
-	cmd.Flags().StringVar(&nodeName, "node-name", "node1", "Name for the control plane node")
-	cmd.Flags().StringVar(&nodeImage, "node-image", config.DefaultNodeImage, "Container image containing base VM images")
-	cmd.Flags().IntVar(&apiPort, "api-port", 0, "API server port to expose (0 = auto-assign random port)")
-	cmd.Flags().IntVar(&memory, "memory", 0, "VM memory in MB (0 = use role default: 1900 for control-plane, 768 for worker)")
-	cmd.Flags().IntVar(&maxMemory, "max-memory", 0, "VM max memory in MB for balloon (0 = use role default: 4096 for control-plane, 2048 for worker)")
-	cmd.Flags().StringVar(&exposePath, "expose", "", "Expose API and save kubeconfig to PATH after cluster is up")
-	cmd.Flags().BoolVar(&hostNetworkPopulator, "host-network-populator", false, "Use host networking for the image populator container (fixes DNS in nested podman)")
-	cmd.Flags().StringVar(&targetImgRef, "target-imgref", "", "Override the bootc image reference tracked by the VM (e.g., registry.cluster.local:5000/node:latest)")
-	cmd.Flags().StringVar(&registryUser, "registry-user", "", "Username for the authenticated registry")
-	cmd.Flags().StringVar(&registryPassword, "registry-password", "", "Password for the authenticated registry")
+	cmd.Flags().StringVar(&opts.nodeName, "node-name", "node1", "Name for the control plane node")
+	cmd.Flags().StringVar(&opts.nodeImage, "node-image", config.DefaultNodeImage, "Container image containing base VM images")
+	cmd.Flags().IntVar(&opts.apiPort, "api-port", 0, "API server port to expose (0 = auto-assign random port)")
+	cmd.Flags().IntVar(&opts.memory, "memory", 0, "VM memory in MB (0 = use role default: 1900 for control-plane, 768 for worker)")
+	cmd.Flags().IntVar(&opts.maxMemory, "max-memory", 0, "VM max memory in MB for balloon (0 = use role default: 4096 for control-plane, 2048 for worker)")
+	cmd.Flags().StringVar(&opts.exposePath, "expose", "", "Expose API and save kubeconfig to PATH after cluster is up")
+	cmd.Flags().BoolVar(&opts.hostNetworkPopulator, "host-network-populator", false, "Use host networking for the image populator container (fixes DNS in nested podman)")
+	cmd.Flags().StringVar(&opts.targetImgRef, "target-imgref", "", "Override the bootc image reference tracked by the VM (e.g., registry.cluster.local:5000/node:latest)")
+	cmd.Flags().StringVar(&opts.registryUser, "registry-user", "", "Username for the authenticated registry")
+	cmd.Flags().StringVar(&opts.registryPassword, "registry-password", "", "Password for the authenticated registry")
 
 	return cmd
 }
 
-func runStart(ctx context.Context, logger *logrus.Logger, nodeName string, nodeImage string, apiPort int, memory int, maxMemory int, exposePath string, hostNetworkPopulator bool, targetImgRef string, registryUser string, registryPassword string) error {
-	authRegistryRequested, err := registry.AuthRegistryRequested(registryUser, registryPassword)
+func runStart(ctx context.Context, logger *logrus.Logger, opts *startOptions) error {
+	authRegistryRequested, err := registry.AuthRegistryRequested(opts.registryUser, opts.registryPassword)
 	if err != nil {
 		return fmt.Errorf("invalid auth registry credentials: %w", err)
 	}
@@ -95,7 +99,7 @@ func runStart(ctx context.Context, logger *logrus.Logger, nodeName string, nodeI
 		return fmt.Errorf("ensuring registry: %w", err)
 	}
 	if authRegistryRequested {
-		if err := registryMgr.EnsureAuthRegistry(ctx, registryUser, registryPassword); err != nil {
+		if err := registryMgr.EnsureAuthRegistry(ctx, opts.registryUser, opts.registryPassword); err != nil {
 			return fmt.Errorf("ensuring auth registry: %w", err)
 		}
 	}
@@ -121,7 +125,7 @@ func runStart(ctx context.Context, logger *logrus.Logger, nodeName string, nodeI
 	if err := podmanClient.EnsureImage(ctx, config.DefaultClusterImage); err != nil {
 		return fmt.Errorf("ensuring cluster image: %w", err)
 	}
-	if err := podmanClient.EnsureImage(ctx, nodeImage); err != nil {
+	if err := podmanClient.EnsureImage(ctx, opts.nodeImage); err != nil {
 		return fmt.Errorf("ensuring node image: %w", err)
 	}
 	logger.Info("")
@@ -129,34 +133,35 @@ func runStart(ctx context.Context, logger *logrus.Logger, nodeName string, nodeI
 	logger.Info("Step 5: Preparing cluster images volume...")
 	clusterMgr := cluster.New(cluster.Config{
 		Name:                 clusterName,
-		ControlPlane:         nodeName,
-		HostNetworkPopulator: hostNetworkPopulator,
+		ControlPlane:         opts.nodeName,
+		HostNetworkPopulator: opts.hostNetworkPopulator,
 		Logger:               logger,
 	})
 
-	clusterImagesVolume, err := clusterMgr.EnsureImagesVolume(ctx, nodeImage)
+	clusterImagesVolume, err := clusterMgr.EnsureImagesVolume(ctx, opts.nodeImage)
 	if err != nil {
 		return fmt.Errorf("ensuring images volume: %w", err)
 	}
 	logger.Info("")
 
-	logger.Infof("Step 6: Creating control plane node (%s)...", nodeName)
-	logger.Infof("Node image: %s", nodeImage)
+	logger.Infof("Step 6: Creating control plane node (%s)...", opts.nodeName)
+	logger.Infof("Node image: %s", opts.nodeImage)
 
 	// Convert 0 to -1 for auto-assign (to distinguish from unset)
+	apiPort := opts.apiPort
 	if apiPort == 0 {
 		apiPort = -1
 	}
 
-	controlPlane, err := node.New(nodeName, true,
-		node.WithNodeImage(nodeImage),
+	controlPlane, err := node.New(opts.nodeName, true,
+		node.WithNodeImage(opts.nodeImage),
 		node.WithClusterName(clusterName),
 		node.WithAPIPort(apiPort),
-		node.WithMemory(memory),
-		node.WithMaxMemory(maxMemory),
+		node.WithMemory(opts.memory),
+		node.WithMaxMemory(opts.maxMemory),
 		node.WithDNSIP(dnsIP),
 		node.WithClusterImagesVolume(clusterImagesVolume),
-		node.WithTargetImgRef(targetImgRef),
+		node.WithTargetImgRef(opts.targetImgRef),
 	)
 	if err != nil {
 		return fmt.Errorf("creating node: %w", err)
@@ -168,23 +173,23 @@ func runStart(ctx context.Context, logger *logrus.Logger, nodeName string, nodeI
 	}
 
 	if exists {
-		return fmt.Errorf("%s already exists. Run 'bink cluster stop' first", nodeName)
+		return fmt.Errorf("%s already exists. Run 'bink cluster stop' first", opts.nodeName)
 	}
 
 	if err := controlPlane.Create(ctx); err != nil {
 		return fmt.Errorf("creating control plane node: %w", err)
 	}
 
-	logger.Infof("Adding %s DNS entry...", nodeName)
-	if err := dnsMgr.AddEntry(ctx, nodeName); err != nil {
-		return fmt.Errorf("adding %s DNS entry: %w", nodeName, err)
+	logger.Infof("Adding %s DNS entry...", opts.nodeName)
+	if err := dnsMgr.AddEntry(ctx, opts.nodeName); err != nil {
+		return fmt.Errorf("adding %s DNS entry: %w", opts.nodeName, err)
 	}
 	logger.Info("")
 
 	logger.Info("Step 7: Initializing Kubernetes cluster...")
 
 	if err := clusterMgr.Init(ctx, cluster.InitOptions{
-		NodeName: nodeName,
+		NodeName: opts.nodeName,
 	}); err != nil {
 		return fmt.Errorf("initializing cluster: %w", err)
 	}
@@ -217,9 +222,9 @@ func runStart(ctx context.Context, logger *logrus.Logger, nodeName string, nodeI
 		logger.Info("")
 	}
 
-	if exposePath != "" {
+	if opts.exposePath != "" {
 		logger.Info("Step 9: Exposing API server...")
-		if err := api.RunExpose(ctx, logger, "", exposePath); err != nil {
+		if err := api.RunExpose(ctx, logger, "", opts.exposePath); err != nil {
 			return fmt.Errorf("exposing API: %w", err)
 		}
 	} else {

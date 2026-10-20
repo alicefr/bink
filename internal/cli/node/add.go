@@ -20,14 +20,18 @@ import (
 	"github.com/bootc-dev/bink/internal/podman"
 )
 
+type addOptions struct {
+	nodeImage            string
+	role                 string
+	memory               int
+	maxMemory            int
+	hostNetworkPopulator bool
+	labelFlags           []string
+	targetImgRef         string
+}
+
 func newAddCmd() *cobra.Command {
-	var nodeImage string
-	var role string
-	var memory int
-	var maxMemory int
-	var hostNetworkPopulator bool
-	var labelFlags []string
-	var targetImgRef string
+	opts := &addOptions{}
 
 	cmd := &cobra.Command{
 		Use:   "add <node-name>",
@@ -43,22 +47,22 @@ func newAddCmd() *cobra.Command {
   bink node add node2 --role control-plane`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			labels, err := parseLabels(labelFlags)
+			labels, err := parseLabels(opts.labelFlags)
 			if err != nil {
 				return err
 			}
 			logger := logrus.New()
-			return runAdd(cmd.Context(), args[0], nodeImage, role, memory, maxMemory, hostNetworkPopulator, labels, targetImgRef, logger)
+			return runAdd(cmd.Context(), args[0], opts, labels, logger)
 		},
 	}
 
-	cmd.Flags().StringVar(&nodeImage, "node-image", config.DefaultNodeImage, "Container image containing base VM images")
-	cmd.Flags().StringVarP(&role, "role", "r", "worker", "Node role: worker or control-plane")
-	cmd.Flags().IntVar(&memory, "memory", 0, "VM memory in MB (0 = use role default: 1900 for control-plane, 768 for worker)")
-	cmd.Flags().IntVar(&maxMemory, "max-memory", 0, "VM max memory in MB for balloon (0 = use role default: 4096 for control-plane, 2048 for worker)")
-	cmd.Flags().BoolVar(&hostNetworkPopulator, "host-network-populator", false, "Use host networking for the image populator container (fixes DNS in nested podman)")
-	cmd.Flags().StringArrayVarP(&labelFlags, "label", "l", nil, "Node label in key=value format (can be specified multiple times)")
-	cmd.Flags().StringVar(&targetImgRef, "target-imgref", "", "Override the bootc image reference tracked by the VM (e.g., registry.cluster.local:5000/node:latest)")
+	cmd.Flags().StringVar(&opts.nodeImage, "node-image", config.DefaultNodeImage, "Container image containing base VM images")
+	cmd.Flags().StringVarP(&opts.role, "role", "r", "worker", "Node role: worker or control-plane")
+	cmd.Flags().IntVar(&opts.memory, "memory", 0, "VM memory in MB (0 = use role default: 1900 for control-plane, 768 for worker)")
+	cmd.Flags().IntVar(&opts.maxMemory, "max-memory", 0, "VM max memory in MB for balloon (0 = use role default: 4096 for control-plane, 2048 for worker)")
+	cmd.Flags().BoolVar(&opts.hostNetworkPopulator, "host-network-populator", false, "Use host networking for the image populator container (fixes DNS in nested podman)")
+	cmd.Flags().StringArrayVarP(&opts.labelFlags, "label", "l", nil, "Node label in key=value format (can be specified multiple times)")
+	cmd.Flags().StringVar(&opts.targetImgRef, "target-imgref", "", "Override the bootc image reference tracked by the VM (e.g., registry.cluster.local:5000/node:latest)")
 
 	cmd.RegisterFlagCompletionFunc("role", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"worker", "control-plane"}, cobra.ShellCompDirectiveNoFileComp
@@ -86,19 +90,18 @@ func parseLabels(labelFlags []string) (map[string]string, error) {
 	return labels, nil
 }
 
-func runAdd(ctx context.Context, nodeName, nodeImage, role string, memory int, maxMemory int, hostNetworkPopulator bool, labels map[string]string, targetImgRef string, logger *logrus.Logger) error {
-	// Validate and convert role to boolean
+func runAdd(ctx context.Context, nodeName string, opts *addOptions, labels map[string]string, logger *logrus.Logger) error {
 	var isControlPlane bool
-	switch role {
+	switch opts.role {
 	case "worker":
 		isControlPlane = false
 	case "control-plane":
 		isControlPlane = true
 	default:
-		return fmt.Errorf("invalid role %q: must be either 'worker' or 'control-plane'", role)
+		return fmt.Errorf("invalid role %q: must be either 'worker' or 'control-plane'", opts.role)
 	}
 
-	logger.Infof("=== Creating %s node %s ===", role, nodeName)
+	logger.Infof("=== Creating %s node %s ===", opts.role, nodeName)
 	logger.Info("")
 
 	clusterName := viper.GetString("cluster.name")
@@ -112,8 +115,8 @@ func runAdd(ctx context.Context, nodeName, nodeImage, role string, memory int, m
 	}
 
 	// Step 1: Create the new node
-	logger.Infof("Step 1: Creating %s node...", role)
-	logger.Infof("Node image: %s", nodeImage)
+	logger.Infof("Step 1: Creating %s node...", opts.role)
+	logger.Infof("Node image: %s", opts.nodeImage)
 
 	// Collect IPs of existing nodes to avoid collisions
 	existingContainers, err := podmanClient.ContainerList(ctx, config.LabelFilter(config.LabelClusterName, clusterName))
@@ -139,11 +142,11 @@ func runAdd(ctx context.Context, nodeName, nodeImage, role string, memory int, m
 	clusterMgr := cluster.New(cluster.Config{
 		Name:                 clusterName,
 		ControlPlane:         controlPlane,
-		HostNetworkPopulator: hostNetworkPopulator,
+		HostNetworkPopulator: opts.hostNetworkPopulator,
 		Logger:               logger,
 	})
 
-	clusterImagesVolume, err := clusterMgr.EnsureImagesVolume(ctx, nodeImage)
+	clusterImagesVolume, err := clusterMgr.EnsureImagesVolume(ctx, opts.nodeImage)
 	if err != nil {
 		return fmt.Errorf("ensuring images volume: %w", err)
 	}
@@ -160,14 +163,14 @@ func runAdd(ctx context.Context, nodeName, nodeImage, role string, memory int, m
 	}
 
 	nodeOpts := []node.NodeOption{
-		node.WithNodeImage(nodeImage),
+		node.WithNodeImage(opts.nodeImage),
 		node.WithClusterName(clusterName),
-		node.WithMemory(memory),
-		node.WithMaxMemory(maxMemory),
+		node.WithMemory(opts.memory),
+		node.WithMaxMemory(opts.maxMemory),
 		node.WithUsedIPs(usedIPs),
 		node.WithDNSIP(dnsIP),
 		node.WithClusterImagesVolume(clusterImagesVolume),
-		node.WithTargetImgRef(targetImgRef),
+		node.WithTargetImgRef(opts.targetImgRef),
 	}
 	if isControlPlane {
 		nodeOpts = append(nodeOpts, node.WithAPIPort(-1))
