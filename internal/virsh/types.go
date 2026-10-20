@@ -8,6 +8,7 @@ type VirtInstallOptions struct {
 	Memory           int
 	MaxMemory        int
 	VCPUs            int
+	BootFirmware     string
 	Disks            []string
 	Networks         []NetworkConfig
 	Filesystems      []FilesystemConfig

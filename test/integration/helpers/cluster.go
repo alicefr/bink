@@ -25,6 +25,12 @@ func NodeImage() string {
 	return config.DefaultNodeImage
 }
 
+// BootFirmware returns the boot firmware to use for tests.
+// It reads BINK_BOOT_FIRMWARE env var, falling back to empty (bios default).
+func BootFirmware() string {
+	return os.Getenv("BINK_BOOT_FIRMWARE")
+}
+
 // GenerateTestClusterName creates a unique cluster name for testing
 func GenerateTestClusterName() string {
 	return fmt.Sprintf("test-bink-%s", uuid.New().String()[:8])
@@ -57,6 +63,9 @@ func RunCommand(cmd *exec.Cmd, timeout ...time.Duration) *gexec.Session {
 func CreateCluster(name string, extraArgs ...string) {
 	GinkgoWriter.Printf("Creating cluster: %s (with auto-assigned API port)\n", name)
 	args := []string{"cluster", "start", "--cluster-name", name, "--api-port", "0", "--memory", "1900", "--max-memory", "4096", "--node-image", NodeImage()}
+	if fw := BootFirmware(); fw != "" {
+		args = append(args, "--boot-firmware", fw)
+	}
 	args = append(args, extraArgs...)
 	cmd := BinkCmd(args...)
 	session := RunCommand(cmd, 10*time.Minute)
@@ -66,7 +75,11 @@ func CreateCluster(name string, extraArgs ...string) {
 // CreateClusterWithNodeName creates a cluster with a custom control-plane node name
 func CreateClusterWithNodeName(name, nodeName string) {
 	GinkgoWriter.Printf("Creating cluster: %s with node name: %s (with auto-assigned API port)\n", name, nodeName)
-	cmd := BinkCmd("cluster", "start", "--cluster-name", name, "--node-name", nodeName, "--api-port", "0", "--memory", "1900", "--max-memory", "4096", "--node-image", NodeImage())
+	args := []string{"cluster", "start", "--cluster-name", name, "--node-name", nodeName, "--api-port", "0", "--memory", "1900", "--max-memory", "4096", "--node-image", NodeImage()}
+	if fw := BootFirmware(); fw != "" {
+		args = append(args, "--boot-firmware", fw)
+	}
+	cmd := BinkCmd(args...)
 	session := RunCommand(cmd, 10*time.Minute)
 	Expect(session.ExitCode()).To(Equal(0), "Failed to create cluster: %s", string(session.Err.Contents()))
 }
@@ -75,6 +88,9 @@ func CreateClusterWithNodeName(name, nodeName string) {
 func AddNode(clusterName, nodeName string, extraArgs ...string) {
 	GinkgoWriter.Printf("Adding node %s to cluster %s\n", nodeName, clusterName)
 	args := []string{"node", "add", nodeName, "--cluster-name", clusterName}
+	if fw := BootFirmware(); fw != "" {
+		args = append(args, "--boot-firmware", fw)
+	}
 	args = append(args, extraArgs...)
 
 	// Use lower memory for worker nodes since they don't run control plane components

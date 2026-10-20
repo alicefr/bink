@@ -218,11 +218,12 @@ func (n *Node) createVM(ctx context.Context) error {
 	}
 
 	opts := &virsh.VirtInstallOptions{
-		Name:      n.Name,
-		Memory:    n.Memory,
-		MaxMemory: maxMemory,
-		VCPUs:     n.VCPUs,
-		Disks:     []string{overlayDisk, isoPath},
+		Name:         n.Name,
+		Memory:       n.Memory,
+		MaxMemory:    maxMemory,
+		VCPUs:        n.VCPUs,
+		BootFirmware: n.BootFirmware,
+		Disks:        []string{overlayDisk, isoPath},
 		Networks: []virsh.NetworkConfig{
 			{
 				Type:        "passt",

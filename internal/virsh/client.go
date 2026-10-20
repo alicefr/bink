@@ -49,6 +49,10 @@ func (c *Client) VirtInstall(ctx context.Context, opts *VirtInstallOptions) erro
 		"--noautoconsole",
 	}
 
+	if opts.BootFirmware == "uefi" {
+		args = append(args, "--boot", "uefi")
+	}
+
 	// Add shared memory support if filesystems are present (required for virtiofs)
 	if len(opts.Filesystems) > 0 {
 		args = append(args, "--memorybacking", "source.type=memfd,access.mode=shared")

@@ -32,6 +32,7 @@ type startOptions struct {
 	targetImgRef         string
 	registryUser         string
 	registryPassword     string
+	bootFirmware         string
 }
 
 func newStartCmd() *cobra.Command {
@@ -65,6 +66,7 @@ func newStartCmd() *cobra.Command {
 	cmd.Flags().StringVar(&opts.targetImgRef, "target-imgref", "", "Override the bootc image reference tracked by the VM (e.g., registry.cluster.local:5000/node:latest)")
 	cmd.Flags().StringVar(&opts.registryUser, "registry-user", "", "Username for the authenticated registry")
 	cmd.Flags().StringVar(&opts.registryPassword, "registry-password", "", "Password for the authenticated registry")
+	cmd.Flags().StringVar(&opts.bootFirmware, "boot-firmware", "", "Boot firmware for the VM (uefi or bios, default: bios)")
 
 	return cmd
 }
@@ -162,6 +164,7 @@ func runStart(ctx context.Context, logger *logrus.Logger, opts *startOptions) er
 		node.WithDNSIP(dnsIP),
 		node.WithClusterImagesVolume(clusterImagesVolume),
 		node.WithTargetImgRef(opts.targetImgRef),
+		node.WithBootFirmware(opts.bootFirmware),
 	)
 	if err != nil {
 		return fmt.Errorf("creating node: %w", err)

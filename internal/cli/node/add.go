@@ -28,6 +28,7 @@ type addOptions struct {
 	hostNetworkPopulator bool
 	labelFlags           []string
 	targetImgRef         string
+	bootFirmware         string
 }
 
 func newAddCmd() *cobra.Command {
@@ -63,6 +64,7 @@ func newAddCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&opts.hostNetworkPopulator, "host-network-populator", false, "Use host networking for the image populator container (fixes DNS in nested podman)")
 	cmd.Flags().StringArrayVarP(&opts.labelFlags, "label", "l", nil, "Node label in key=value format (can be specified multiple times)")
 	cmd.Flags().StringVar(&opts.targetImgRef, "target-imgref", "", "Override the bootc image reference tracked by the VM (e.g., registry.cluster.local:5000/node:latest)")
+	cmd.Flags().StringVar(&opts.bootFirmware, "boot-firmware", "", "Boot firmware for the VM (uefi or bios, default: bios)")
 
 	cmd.RegisterFlagCompletionFunc("role", func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 		return []string{"worker", "control-plane"}, cobra.ShellCompDirectiveNoFileComp
@@ -171,6 +173,7 @@ func runAdd(ctx context.Context, nodeName string, opts *addOptions, labels map[s
 		node.WithDNSIP(dnsIP),
 		node.WithClusterImagesVolume(clusterImagesVolume),
 		node.WithTargetImgRef(opts.targetImgRef),
+		node.WithBootFirmware(opts.bootFirmware),
 	}
 	if isControlPlane {
 		nodeOpts = append(nodeOpts, node.WithAPIPort(-1))

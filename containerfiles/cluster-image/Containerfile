@@ -16,6 +16,7 @@ RUN dnf install -y --setopt=install_weak_deps=0 \
 	openssh-clients \
 	genisoimage \
 	podman \
+	edk2-ovmf \
 	&& dnf clean all
 
 COPY qemu.conf /etc/libvirt/qemu.conf

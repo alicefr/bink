@@ -30,6 +30,7 @@ type Node struct {
 	APIPort             int // Configured API port (0 = auto-assign)
 	AssignedAPIPort     int // Actual assigned port after container creation
 	TargetImgRef        string
+	BootFirmware        string
 
 	usedIPs []string
 	podman  *podman.Client
@@ -104,6 +105,13 @@ func WithTargetImgRef(ref string) NodeOption {
 func WithClusterImagesVolume(volumeName string) NodeOption {
 	return func(n *Node) error {
 		n.ClusterImagesVolume = volumeName
+		return nil
+	}
+}
+
+func WithBootFirmware(firmware string) NodeOption {
+	return func(n *Node) error {
+		n.BootFirmware = firmware
 		return nil
 	}
 }
