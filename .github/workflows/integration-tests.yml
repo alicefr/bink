@@ -285,6 +285,7 @@ jobs:
         timeout-minutes: 90
         env:
           BINK_NODE_IMAGE: ghcr.io/bootc-dev/bink/node:v${{ needs.supported-versions.outputs.default-version }}-fedora-${{ needs.supported-versions.outputs.fedora-version }}-disk-composefs
+          BINK_BOOT_FIRMWARE: uefi
 
       - name: Collect logs
         if: failure()

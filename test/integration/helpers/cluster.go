@@ -62,7 +62,11 @@ func RunCommand(cmd *exec.Cmd, timeout ...time.Duration) *gexec.Session {
 // Uses auto-assigned ports (--api-port 0) to avoid port conflicts in tests
 func CreateCluster(name string, extraArgs ...string) {
 	GinkgoWriter.Printf("Creating cluster: %s (with auto-assigned API port)\n", name)
-	args := []string{"cluster", "start", "--cluster-name", name, "--api-port", "0", "--memory", "1900", "--max-memory", "4096", "--node-image", NodeImage()}
+	memory := "1900"
+	if BootFirmware() == "uefi" {
+		memory = "2048"
+	}
+	args := []string{"cluster", "start", "--cluster-name", name, "--api-port", "0", "--memory", memory, "--max-memory", "4096", "--node-image", NodeImage()}
 	if fw := BootFirmware(); fw != "" {
 		args = append(args, "--boot-firmware", fw)
 	}
@@ -75,7 +79,11 @@ func CreateCluster(name string, extraArgs ...string) {
 // CreateClusterWithNodeName creates a cluster with a custom control-plane node name
 func CreateClusterWithNodeName(name, nodeName string) {
 	GinkgoWriter.Printf("Creating cluster: %s with node name: %s (with auto-assigned API port)\n", name, nodeName)
-	args := []string{"cluster", "start", "--cluster-name", name, "--node-name", nodeName, "--api-port", "0", "--memory", "1900", "--max-memory", "4096", "--node-image", NodeImage()}
+	memory := "1900"
+	if BootFirmware() == "uefi" {
+		memory = "2048"
+	}
+	args := []string{"cluster", "start", "--cluster-name", name, "--node-name", nodeName, "--api-port", "0", "--memory", memory, "--max-memory", "4096", "--node-image", NodeImage()}
 	if fw := BootFirmware(); fw != "" {
 		args = append(args, "--boot-firmware", fw)
 	}
@@ -102,7 +110,11 @@ func AddNode(clusterName, nodeName string, extraArgs ...string) {
 		}
 	}
 	if isControlPlane {
-		args = append(args, "--memory", "1900", "--max-memory", "4096")
+		memory := "1900"
+		if BootFirmware() == "uefi" {
+			memory = "2048"
+		}
+		args = append(args, "--memory", memory, "--max-memory", "4096")
 	} else {
 		args = append(args, "--memory", "768", "--max-memory", "2048")
 	}
