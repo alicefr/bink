@@ -69,8 +69,19 @@ func runRemove(ctx context.Context, nodeName string, force bool, logger *logrus.
 	isControlPlane := role == "control-plane"
 	logger.Info("")
 
-	// Step 2: Drain and delete from Kubernetes via SSH to a control-plane node
-	logger.Info("Step 2: Removing node from Kubernetes...")
+	// Step 2: For control-plane nodes, run kubeadm reset on the node to
+	// cleanly remove it from the etcd cluster. Without this, etcd loses
+	// quorum when the node goes down.
+	if isControlPlane {
+		logger.Info("Step 2: Resetting control-plane node (removes etcd member)...")
+		targetSSH := ssh.NewClientForNode(clusterName, nodeName, logger)
+		if err := resetControlPlane(ctx, targetSSH, logger); err != nil {
+			return fmt.Errorf("kubeadm reset failed: %w", err)
+		}
+	}
+
+	// Step 3: Drain and delete from Kubernetes via SSH to a control-plane node
+	logger.Info("Step 3: Removing node from Kubernetes...")
 	cpNode, err := findControlPlaneNode(ctx, podmanClient, clusterName, nodeName)
 	if err != nil {
 		logger.Warnf("Could not find control-plane node: %v", err)
@@ -84,8 +95,8 @@ func runRemove(ctx context.Context, nodeName string, force bool, logger *logrus.
 	}
 	logger.Info("")
 
-	// Step 3: Remove DNS entry
-	logger.Info("Step 3: Removing DNS entry...")
+	// Step 4: Remove DNS entry
+	logger.Info("Step 4: Removing DNS entry...")
 	dnsMgr, err := dns.NewManager(clusterName)
 	if err != nil {
 		logger.Warnf("Failed to create DNS manager: %v", err)
@@ -94,8 +105,8 @@ func runRemove(ctx context.Context, nodeName string, force bool, logger *logrus.
 	}
 	logger.Info("")
 
-	// Step 4: Stop and remove the container
-	logger.Info("Step 4: Stopping and removing container...")
+	// Step 5: Stop and remove the container
+	logger.Info("Step 5: Stopping and removing container...")
 	if err := podmanClient.ContainerStop(ctx, containerName); err != nil {
 		logger.Warnf("Failed to stop container: %v", err)
 	}
@@ -105,9 +116,9 @@ func runRemove(ctx context.Context, nodeName string, force bool, logger *logrus.
 	logger.Infof("Container %s removed", containerName)
 	logger.Info("")
 
-	// Step 5: Update HAProxy if this was a control-plane node
+	// Step 6: Update HAProxy if this was a control-plane node
 	if isControlPlane {
-		logger.Info("Step 5: Updating HAProxy load balancer...")
+		logger.Info("Step 6: Updating HAProxy load balancer...")
 		haproxyMgr, err := haproxy.NewManager(clusterName)
 		if err != nil {
 			logger.Warnf("Failed to create HAProxy manager: %v", err)
@@ -146,6 +157,15 @@ func findControlPlaneNode(ctx context.Context, podmanClient *podman.Client, clus
 	}
 
 	return "", fmt.Errorf("no control-plane node found in cluster %s", clusterName)
+}
+
+func resetControlPlane(ctx context.Context, sshClient *ssh.Client, logger *logrus.Logger) error {
+	logger.Info("Running kubeadm reset on control-plane node...")
+	if _, err := sshClient.Exec(ctx, "sudo kubeadm reset --force"); err != nil {
+		return fmt.Errorf("kubeadm reset: %w", err)
+	}
+	logger.Info("kubeadm reset completed")
+	return nil
 }
 
 func removeFromKubernetes(ctx context.Context, sshClient *ssh.Client, nodeName string, force bool, logger *logrus.Logger) error {
